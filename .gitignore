@@ -1,0 +1,37 @@
+# Unity 官方标准 .gitignore (适配所有版本，含Unity 6)
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+
+# 智能设备支持文件
+/[Ii]OS[Bb]uild/
+/[Aa]ndroid[Bb]uild/
+
+# JetBrains Rider / Visual Studio 缓存
+.vs/
+.idea/
+*.sln
+*.csproj
+*.unityproj
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 打包输出
+/[Bb]in/
+/[Oo]bj/
+
+# 其他Unity自动生成文件
+*.apk
+*.unitypackage
