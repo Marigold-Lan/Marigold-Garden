@@ -50,17 +50,15 @@ namespace FlowField.Systems
             spatialHash.Clear();
 
             // 收集所有代理位置
-            NativeArray<float2>.ParallelWriter agentPositions = new NativeArray<float2>(4096, Allocator.TempJob);
+            NativeArray<float2> agentPositions = new NativeArray<float2>(4096, Allocator.TempJob);
             NativeList<int> agentIds = new NativeList<int>(4096, Allocator.TempJob);
 
-            Entities
-                .WithAll<FlowFieldAgent>()
-                .ForEach((Entity entity, ref FlowFieldAgent agent) =>
-                {
-                    int id = entity.Index;
-                    agentIds.Add(id);
-                    agentPositions[id] = agent.Position;
-                }).Run();
+            foreach (var (agent, entity) in SystemAPI.Query<RefRO<FlowFieldAgent>>().WithEntityAccess())
+            {
+                int id = entity.Index;
+                agentIds.Add(id);
+                agentPositions[id] = agent.ValueRO.Position;
+            }
 
             // 重建哈希表
             var rebuildJob = new RebuildSpatialHashJob
@@ -84,7 +82,7 @@ namespace FlowField.Systems
         }
 
         [BurstCompile]
-        private struct RebuildSpatialHashJob : IJobParallelFor
+        struct RebuildSpatialHashJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<int> AgentIds;
             [ReadOnly] public NativeArray<float2> AgentPositions;
@@ -140,7 +138,7 @@ namespace FlowField.Systems
                         do
                         {
                             results.Add(entityId);
-                        } while (spatialHash.TryGetNextValue(ref iterator));
+                        } while (spatialHash.TryGetNextValue(out entityId, ref iterator));
                     }
                 }
             }

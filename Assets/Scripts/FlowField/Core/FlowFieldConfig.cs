@@ -84,8 +84,8 @@ namespace FlowField
         {
             float2 size = WorldBoundsMax - WorldBoundsMin;
             return new int2(
-                math.ceil(size.x / CellSize),
-                math.ceil(size.y / CellSize)
+                (int)math.ceil(size.x / CellSize),
+                (int)math.ceil(size.y / CellSize)
             );
         }
     }

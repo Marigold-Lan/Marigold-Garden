@@ -16,7 +16,7 @@ namespace FlowField.Jobs
     /// 时间复杂度: O(N × log(D)) 其中N为像素数，D为最大距离
     /// 空间复杂度: O(N)
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct JFA_SDFInitJob : IJobParallelFor
     {
         [WriteOnly] public NativeArray<float> Distances;
@@ -35,7 +35,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// JFA单轮迭代Job
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct JFA_SDFIterationJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float> InputDistances;
@@ -63,53 +63,50 @@ namespace FlowField.Jobs
 
             float bestDist = currentDist;
 
-            // 8方向探测
-            int2[] offsets = new int2[]
-            {
-                new int2(-Step,  0), new int2( Step,  0),
-                new int2( 0, -Step), new int2( 0,  Step),
-                new int2(-Step, -Step), new int2( Step, -Step),
-                new int2(-Step,  Step), new int2( Step,  Step),
-            };
-
-            for (int dir = 0; dir < 8; dir++)
-            {
-                int nx = x + offsets[dir].x;
-                int ny = y + offsets[dir].y;
-
-                // 边界检查
-                if (nx < 0 || nx >= GridSize.x || ny < 0 || ny >= GridSize.y)
-                    continue;
-
-                int neighborIdx = ny * GridSize.x + nx;
-                float neighborDist = InputDistances[neighborIdx];
-
-                // 如果邻居是障碍物，距离为到障碍物的距离
-                if (CellTypes[neighborIdx] == (byte)CellType.Obstacle)
-                {
-                    // 测量到障碍物的实际距离（简化版本使用曼哈顿距离×cellSize）
-                    float dx = math.abs(nx - x);
-                    float dy = math.abs(ny - y);
-                    float distToObstacle = (dx + dy) * 0.707f; // 对角线
-                    bestDist = math.min(bestDist, distToObstacle);
-                }
-                else if (neighborDist < float.MaxValue)
-                {
-                    float dx = math.abs(nx - x);
-                    float dy = math.abs(ny - y);
-                    float pathDist = neighborDist + (dx + dy) * 0.707f;
-                    bestDist = math.min(bestDist, pathDist);
-                }
-            }
+            // 8方向探测 - 展开为固定偏移
+            int s = Step;
+            ProbeNeighbor(x, y, -s,  0, ref bestDist);
+            ProbeNeighbor(x, y,  s,  0, ref bestDist);
+            ProbeNeighbor(x, y,  0, -s, ref bestDist);
+            ProbeNeighbor(x, y,  0,  s, ref bestDist);
+            ProbeNeighbor(x, y, -s, -s, ref bestDist);
+            ProbeNeighbor(x, y,  s, -s, ref bestDist);
+            ProbeNeighbor(x, y, -s,  s, ref bestDist);
+            ProbeNeighbor(x, y,  s,  s, ref bestDist);
 
             OutputDistances[index] = bestDist;
+        }
+
+        [GenerateTestsForBurstCompatibility]
+        private void ProbeNeighbor(int x, int y, int ddx, int ddy, ref float bestDist)
+        {
+            int nx = x + ddx;
+            int ny = y + ddy;
+            if (nx < 0 || nx >= GridSize.x || ny < 0 || ny >= GridSize.y)
+                return;
+
+            int neighborIdx = ny * GridSize.x + nx;
+            float neighborDist = InputDistances[neighborIdx];
+
+            if (CellTypes[neighborIdx] == (byte)CellType.Obstacle)
+            {
+                float adx = math.abs(ddx);
+                float ady = math.abs(ddy);
+                bestDist = math.min(bestDist, (adx + ady) * 0.707f);
+            }
+            else if (neighborDist < float.MaxValue)
+            {
+                float adx = math.abs(ddx);
+                float ady = math.abs(ddy);
+                bestDist = math.min(bestDist, neighborDist + (adx + ady) * 0.707f);
+            }
         }
     }
 
     /// <summary>
     /// 障碍物标记Job - 将障碍物区域标记到网格
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct MarkObstaclesJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float2> ObstaclePositions;
@@ -169,7 +166,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 增量SDF更新Job - 只更新受影响的区域
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct IncrementalSDFUpdateJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float> OldDistances;
@@ -233,7 +230,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// SDF边界平滑Job - 在障碍物边界创建平滑过渡
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct SDFSmoothJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float> InputDistances;
@@ -262,25 +259,11 @@ namespace FlowField.Jobs
             float sum = centerDist;
             float weight = 1f;
 
-            // 4方向邻居
-            int2[] neighbors = new int2[]
-            {
-                new int2(-1, 0), new int2(1, 0),
-                new int2(0, -1), new int2(0, 1)
-            };
-
-            for (int i = 0; i < 4; i++)
-            {
-                int nx = x + neighbors[i].x;
-                int ny = y + neighbors[i].y;
-
-                if (nx < 0 || nx >= GridSize.x || ny < 0 || ny >= GridSize.y)
-                    continue;
-
-                int neighborIdx = ny * GridSize.x + nx;
-                sum += InputDistances[neighborIdx];
-                weight += 1f;
-            }
+            // 4方向邻居 - 内联偏移
+            if (x > 0) { sum += InputDistances[y * GridSize.x + (x - 1)]; weight += 1f; }
+            if (x < GridSize.x - 1) { sum += InputDistances[y * GridSize.x + (x + 1)]; weight += 1f; }
+            if (y > 0) { sum += InputDistances[(y - 1) * GridSize.x + x]; weight += 1f; }
+            if (y < GridSize.y - 1) { sum += InputDistances[(y + 1) * GridSize.x + x]; weight += 1f; }
 
             OutputDistances[index] = math.lerp(centerDist, sum / weight, SmoothFactor);
         }

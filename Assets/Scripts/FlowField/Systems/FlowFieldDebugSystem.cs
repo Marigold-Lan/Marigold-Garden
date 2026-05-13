@@ -42,17 +42,11 @@ namespace FlowField.Systems
             int obstacleCount = 0;
             int goalCount = 0;
 
-            Entities
-                .WithAll<FlowFieldAgent>()
-                .ForEach((Entity entity) => { agentCount++; }).Run();
+            foreach (var _ in SystemAPI.Query<RefRO<FlowFieldAgent>>()) { agentCount++; }
 
-            Entities
-                .WithAll<FlowFieldObstacle>()
-                .ForEach((Entity entity) => { obstacleCount++; }).Run();
+            foreach (var _ in SystemAPI.Query<RefRO<FlowFieldObstacle>>()) { obstacleCount++; }
 
-            Entities
-                .WithAll<FlowFieldGoal>()
-                .ForEach((Entity entity) => { goalCount++; }).Run();
+            foreach (var _ in SystemAPI.Query<RefRO<FlowFieldGoal>>()) { goalCount++; }
 
             return $"Flow Field Debug Info:\n" +
                    $"Grid Size: {grid.GridSize.x}x{grid.GridSize.y}\n" +
@@ -75,7 +69,7 @@ namespace FlowField.Systems
         /// <summary>
         /// 获取流场网格用于编辑器绘制
         /// </summary>
-        public static FlowFieldGrid GetGrid(EntityWorld world)
+        public static FlowFieldGrid GetGrid(World world)
         {
             var gridSystem = world.GetOrCreateSystemManaged<FlowFieldGridSystem>();
             return gridSystem.GetGrid();

@@ -45,22 +45,18 @@ namespace FlowField.Systems
             bool needsUpdate = false;
 
             // 检查是否有障碍物更新请求
-            Entities
-                .WithAll<FlowFieldObstacle>()
-                .WithChangeFilter<FlowFieldObstacle>()
-                .ForEach((Entity entity, ref FlowFieldObstacle obstacle) =>
-                {
-                    needsUpdate = true;
-                }).Run();
+            foreach (var obstacle in SystemAPI.Query<RefRO<FlowFieldObstacle>>().WithChangeFilter<FlowFieldObstacle>())
+            {
+                needsUpdate = true;
+                break;
+            }
 
             // 检查是否有目标更新请求
-            Entities
-                .WithAll<FlowFieldGoal>()
-                .WithChangeFilter<FlowFieldGoal>()
-                .ForEach((Entity entity, ref FlowFieldGoal goal) =>
-                {
-                    needsUpdate = true;
-                }).Run();
+            foreach (var goal in SystemAPI.Query<RefRO<FlowFieldGoal>>().WithChangeFilter<FlowFieldGoal>())
+            {
+                needsUpdate = true;
+                break;
+            }
 
             if (!needsUpdate) return;
 
@@ -70,32 +66,28 @@ namespace FlowField.Systems
             NativeList<byte> obstacleShapes = new NativeList<byte>(256, Allocator.TempJob);
             NativeList<float2> obstacleHalfExtents = new NativeList<float2>(256, Allocator.TempJob);
 
-            Entities
-                .WithAll<FlowFieldObstacle>()
-                .ForEach((Entity entity, ref FlowFieldObstacle obstacle) =>
-                {
-                    obstaclePositions.Add(obstacle.Position);
-                    obstacleRadii.Add(obstacle.Radius);
-                    obstacleShapes.Add((byte)obstacle.Shape);
-                    obstacleHalfExtents.Add(obstacle.HalfExtents);
-                }).Run();
+            foreach (var obstacle in SystemAPI.Query<RefRO<FlowFieldObstacle>>())
+            {
+                obstaclePositions.Add(obstacle.ValueRO.Position);
+                obstacleRadii.Add(obstacle.ValueRO.Radius);
+                obstacleShapes.Add((byte)obstacle.ValueRO.Shape);
+                obstacleHalfExtents.Add(obstacle.ValueRO.HalfExtents);
+            }
 
             // 收集所有目标
             NativeList<float2> goalPositions = new NativeList<float2>(64, Allocator.TempJob);
             NativeList<float> goalRadii = new NativeList<float>(64, Allocator.TempJob);
             NativeList<int> goalPriorities = new NativeList<int>(64, Allocator.TempJob);
 
-            Entities
-                .WithAll<FlowFieldGoal>()
-                .ForEach((Entity entity, ref FlowFieldGoal goal) =>
+            foreach (var goal in SystemAPI.Query<RefRO<FlowFieldGoal>>())
+            {
+                if (goal.ValueRO.IsActive)
                 {
-                    if (goal.IsActive)
-                    {
-                        goalPositions.Add(goal.Position);
-                        goalRadii.Add(goal.Radius);
-                        goalPriorities.Add(goal.Priority);
-                    }
-                }).Run();
+                    goalPositions.Add(goal.ValueRO.Position);
+                    goalRadii.Add(goal.ValueRO.Radius);
+                    goalPriorities.Add(goal.ValueRO.Priority);
+                }
+            }
 
             // 1. 标记障碍物
             var markObstaclesJob = new MarkObstaclesGridJob
@@ -150,6 +142,7 @@ namespace FlowField.Systems
                     InputDistances = pass == 0 ? grid.GoalDistances : tempGoalDist,
                     OutputDistances = tempGoalDist,
                     CellTypes = grid.CellTypes,
+                    Integrated = grid.GoalIntegrated,
                     GridSize = gridSize,
                     PassIndex = pass
                 };
@@ -221,7 +214,7 @@ namespace FlowField.Systems
     // ==================== Jobs ====================
 
     [BurstCompile]
-    private struct MarkObstaclesGridJob : IJob
+    struct MarkObstaclesGridJob : IJob
     {
         [ReadOnly] public NativeArray<float2> ObstaclePositions;
         [ReadOnly] public NativeArray<float> ObstacleRadii;
@@ -286,7 +279,7 @@ namespace FlowField.Systems
     }
 
     [BurstCompile]
-    private struct MarkGoalsGridJob : IJob
+    struct MarkGoalsGridJob : IJob
     {
         [ReadOnly] public NativeArray<float2> GoalPositions;
         [ReadOnly] public NativeArray<float> GoalRadii;
@@ -341,7 +334,7 @@ namespace FlowField.Systems
     }
 
     [BurstCompile]
-    private struct InitGoalDistancesJob : IJob
+    struct InitGoalDistancesJob : IJob
     {
         [WriteOnly] public NativeArray<float> GoalDistances;
         [WriteOnly] public NativeArray<int> Integrated;
@@ -360,11 +353,13 @@ namespace FlowField.Systems
     }
 
     [BurstCompile]
-    private struct PropagateGoalDistancesJob : IJob
+    struct PropagateGoalDistancesJob : IJob
     {
         [ReadOnly] public NativeArray<float> InputDistances;
         [WriteOnly] public NativeArray<float> OutputDistances;
         [ReadOnly] public NativeArray<byte> CellTypes;
+
+        public NativeArray<int> Integrated;
 
         public int2 GridSize;
         public int PassIndex;
@@ -440,7 +435,7 @@ namespace FlowField.Systems
     }
 
     [BurstCompile]
-    private struct ComputeFlowDirectionsJob : IJob
+    struct ComputeFlowDirectionsJob : IJob
     {
         [ReadOnly] public NativeArray<float> GoalDistances;
         [ReadOnly] public NativeArray<byte> CellTypes;

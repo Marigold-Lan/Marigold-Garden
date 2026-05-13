@@ -8,7 +8,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 空间哈希重建Job - 将所有代理和障碍物插入空间哈希表
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct SpatialHashRebuildJob : IJob
     {
         [ReadOnly] public NativeArray<float2> AgentPositions;
@@ -77,7 +77,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 空间哈希增量更新Job - 只更新移动的实体
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct SpatialHashUpdateJob : IJob
     {
         [ReadOnly] public NativeArray<int> UpdatedEntityIds;
@@ -187,7 +187,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 邻居查询Job - 批量查询某位置周围的实体
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct NeighborQueryJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float2> QueryPositions;

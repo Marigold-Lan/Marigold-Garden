@@ -1,3 +1,4 @@
+using System;
 using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Burst;
@@ -11,9 +12,9 @@ namespace FlowField
     public struct FlowFieldGrid : IDisposable
     {
         // ==================== 配置 ====================
-        public readonly int2 GridSize;
-        public readonly float CellSize;
-        public readonly float2 Origin;
+        public int2 GridSize;
+        public float CellSize;
+        public float2 Origin;
 
         // ==================== SoA布局数据 ====================
         public NativeArray<float> Distances;
@@ -95,7 +96,7 @@ namespace FlowField
         [GenerateTestsForBurstCompatibility]
         public float2 CellToWorldCorner(int2 cell)
         {
-            return Origin + cell * CellSize;
+            return Origin + new float2(cell.x, cell.y) * CellSize;
         }
 
         /// <summary>
@@ -142,7 +143,7 @@ namespace FlowField
         [GenerateTestsForBurstCompatibility]
         public float4 GetCellBounds(int2 cell)
         {
-            float2 min = Origin + cell * CellSize;
+            float2 min = Origin + new float2(cell.x, cell.y) * CellSize;
             return new float4(min, min + CellSize);
         }
 
@@ -187,7 +188,7 @@ namespace FlowField
             float2 normalizedPos = (worldPos - Origin) / CellSize;
             float2 cellPos = normalizedPos - 0.5f;
 
-            int2 cell0 = new int2(math.floor(cellPos.x), math.floor(cellPos.y));
+            int2 cell0 = new int2((int)math.floor(cellPos.x), (int)math.floor(cellPos.y));
             float2 frac = cellPos - new float2(cell0);
 
             int2 cell00 = cell0;

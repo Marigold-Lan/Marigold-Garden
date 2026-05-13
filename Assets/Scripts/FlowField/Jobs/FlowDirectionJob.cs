@@ -8,7 +8,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 目标点标记Job - 将目标区域标记到网格
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct MarkGoalsJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float2> GoalPositions;
@@ -66,7 +66,7 @@ namespace FlowField.Jobs
     /// Goal距离传播Job - BFS式波前传播
     /// 使用多目标竞争机制，选择最近的目标
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct GoalDistancePropagationJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float> OldGoalDistances;
@@ -102,35 +102,30 @@ namespace FlowField.Jobs
             float bestDist = OldGoalDistances[index];
 
             // 4方向邻居（卡洪移动）
-            int2[] neighbors = new int2[]
-            {
-                new int2(-1, 0), new int2(1, 0),
-                new int2(0, -1), new int2(0, 1)
-            };
-
-            float[] neighborDistCosts = new float[]
-            {
-                1f, 1f, 1f, 1f
-            };
+            int dx0 = -1, dy0 = 0;
+            int dx1 =  1, dy1 = 0;
+            int dx2 =  0, dy2 = -1;
+            int dx3 =  0, dy3 = 1;
 
             for (int i = 0; i < 4; i++)
             {
-                int nx = x + neighbors[i].x;
-                int ny = y + neighbors[i].y;
+                int ddx = i == 0 ? dx0 : i == 1 ? dx1 : i == 2 ? dx2 : dx3;
+                int ddy = i == 0 ? dy0 : i == 1 ? dy1 : i == 2 ? dy2 : dy3;
+                int nx = x + ddx;
+                int ny = y + ddy;
 
                 if (nx < 0 || nx >= GridSize.x || ny < 0 || ny >= GridSize.y)
                     continue;
 
                 int neighborIdx = ny * GridSize.x + nx;
 
-                // 不能穿过障碍物
                 if (CellTypes[neighborIdx] == (byte)CellType.Obstacle)
                     continue;
 
                 float neighborDist = OldGoalDistances[neighborIdx];
                 if (neighborDist < float.MaxValue)
                 {
-                    float pathDist = neighborDist + neighborDistCosts[i];
+                    float pathDist = neighborDist + 1f;
                     if (pathDist < bestDist)
                     {
                         bestDist = pathDist;
@@ -151,7 +146,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 目标距离初始化Job
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct GoalDistanceInitJob : IJobParallelFor
     {
         [WriteOnly] public NativeArray<float> GoalDistances;
@@ -171,7 +166,7 @@ namespace FlowField.Jobs
     /// 流场方向计算Job - 基于Goal距离梯度计算方向
     /// Direction = -grad(GoalDistances)
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct FlowDirectionJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float> GoalDistances;
@@ -257,7 +252,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 多目标流场方向Job - 处理多个目标点竞争的情况
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct MultiGoalFlowDirectionJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float> GoalDistances;
@@ -369,7 +364,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 方向平滑Job - 在方向场中创建平滑过渡
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct DirectionSmoothJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float2> InputDirections;
@@ -393,27 +388,26 @@ namespace FlowField.Jobs
             float2 sum = InputDirections[index];
             float weight = 1f;
 
-            // 4方向邻居
-            int2[] neighbors = new int2[]
+            // 4方向邻居 - 内联偏移
+            if (x > 0)
             {
-                new int2(-1, 0), new int2(1, 0),
-                new int2(0, -1), new int2(0, 1)
-            };
-
-            for (int i = 0; i < 4; i++)
+                int neighborIdx = y * GridSize.x + (x - 1);
+                if (CellTypes[neighborIdx] != (byte)CellType.Obstacle) { sum += InputDirections[neighborIdx]; weight += 1f; }
+            }
+            if (x < GridSize.x - 1)
             {
-                int nx = x + neighbors[i].x;
-                int ny = y + neighbors[i].y;
-
-                if (nx < 0 || nx >= GridSize.x || ny < 0 || ny >= GridSize.y)
-                    continue;
-
-                int neighborIdx = ny * GridSize.x + nx;
-                if (CellTypes[neighborIdx] != (byte)CellType.Obstacle)
-                {
-                    sum += InputDirections[neighborIdx];
-                    weight += 1f;
-                }
+                int neighborIdx = y * GridSize.x + (x + 1);
+                if (CellTypes[neighborIdx] != (byte)CellType.Obstacle) { sum += InputDirections[neighborIdx]; weight += 1f; }
+            }
+            if (y > 0)
+            {
+                int neighborIdx = (y - 1) * GridSize.x + x;
+                if (CellTypes[neighborIdx] != (byte)CellType.Obstacle) { sum += InputDirections[neighborIdx]; weight += 1f; }
+            }
+            if (y < GridSize.y - 1)
+            {
+                int neighborIdx = (y + 1) * GridSize.x + x;
+                if (CellTypes[neighborIdx] != (byte)CellType.Obstacle) { sum += InputDirections[neighborIdx]; weight += 1f; }
             }
 
             float2 avg = sum / weight;

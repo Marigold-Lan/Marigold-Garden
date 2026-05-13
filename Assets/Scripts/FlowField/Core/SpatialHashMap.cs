@@ -1,3 +1,4 @@
+using System;
 using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Burst;
@@ -12,11 +13,11 @@ namespace FlowField
     public struct SpatialHashMap : IDisposable
     {
         // ==================== 配置 ====================
-        public readonly float CellSize;
-        public readonly float InvCellSize;
-        public readonly int2 GridSize;
-        public readonly int TotalCells;
-        public readonly int Capacity;
+        public float CellSize;
+        public float InvCellSize;
+        public int2 GridSize;
+        public int TotalCells;
+        public int Capacity;
 
         // ==================== 数据存储 ====================
         public NativeArray<int2> CellEntities;  // 每个空间格子存储的实体索引列表
@@ -34,8 +35,8 @@ namespace FlowField
         {
             float2 size = worldBoundsMax - worldBoundsMin;
             int2 gridSize = new int2(
-                math.ceil(size.x / cellSize),
-                math.ceil(size.y / cellSize)
+                (int)math.ceil(size.x / cellSize),
+                (int)math.ceil(size.y / cellSize)
             );
             int totalCells = gridSize.x * gridSize.y;
 

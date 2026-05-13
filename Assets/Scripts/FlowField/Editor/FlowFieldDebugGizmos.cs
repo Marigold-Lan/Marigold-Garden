@@ -1,4 +1,6 @@
 #if UNITY_EDITOR
+using Unity.Entities;
+using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 
@@ -61,7 +63,7 @@ namespace FlowField.Editor
         private static void DrawFlowFieldGizmos(FlowFieldDebugGizmos gizmos)
         {
             // 尝试获取流场系统
-            var world = UnityEngine.Experimental.Entities.World.DefaultGameObjectInjectionWorld;
+            var world = World.DefaultGameObjectInjectionWorld;
             if (world == null) return;
 
             FlowFieldGrid grid = default;
@@ -170,8 +172,8 @@ namespace FlowField.Editor
 
                     // 绘制箭头头部
                     float2 perpDir = new float2(-dir.y, dir.x);
-                    float2 head1 = endPos - dir * headSize + perpDir * headSize * 0.5f;
-                    float2 head2 = endPos - dir * headSize - perpDir * headSize * 0.5f;
+                    float2 head1 = new float2(endPos.x, endPos.z) - dir * headSize + perpDir * headSize * 0.5f;
+                    float2 head2 = new float2(endPos.x, endPos.z) - dir * headSize - perpDir * headSize * 0.5f;
                     Gizmos.DrawLine(endPos, new Vector3(head1.x, 0, head1.y));
                     Gizmos.DrawLine(endPos, new Vector3(head2.x, 0, head2.y));
                 }

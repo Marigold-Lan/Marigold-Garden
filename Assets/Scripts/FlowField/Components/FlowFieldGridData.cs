@@ -55,8 +55,8 @@ namespace FlowField
         {
             float2 size = worldBoundsMax - worldBoundsMin;
             int2 gridSize = new int2(
-                math.ceil(size.x / cellSize),
-                math.ceil(size.y / cellSize)
+                (int)math.ceil(size.x / cellSize),
+                (int)math.ceil(size.y / cellSize)
             );
 
             return new FlowFieldGridData

@@ -25,78 +25,76 @@ namespace FlowField.Systems
             int gridVersion = gridSystem.GetVersion();
 
             // 收集代理数据
-            Entities
-                .WithAll<FlowFieldAgent>()
-                .ForEach((Entity entity, ref FlowFieldAgent agent) =>
+            foreach (var agent in SystemAPI.Query<RefRW<FlowFieldAgent>>())
+            {
+                // 检查是否需要更新寻路
+                if (agent.ValueRW.PathVersion < gridVersion)
                 {
-                    // 检查是否需要更新寻路
-                    if (agent.PathVersion < gridVersion)
+                    agent.ValueRW.State = AgentState.Seeking;
+                    agent.ValueRW.PathVersion = gridVersion;
+                }
+
+                // 如果不在寻路状态，跳过
+                if (agent.ValueRO.State != AgentState.Seeking)
+                    continue;
+
+                // 获取流场方向
+                int2 cell = grid.WorldToCellSafe(agent.ValueRO.Position);
+                if (!grid.IsValidCell(cell))
+                {
+                    agent.ValueRW.State = AgentState.NoPath;
+                    continue;
+                }
+
+                int cellIdx = grid.CellToIndex(cell);
+                float2 direction = grid.Directions[cellIdx];
+
+                if (math.lengthsq(direction) < 1e-10f)
+                {
+                    agent.ValueRW.State = AgentState.NoPath;
+                    continue;
+                }
+
+                // 归一化方向
+                direction = math.normalize(direction);
+
+                // 计算速度
+                float2 newVelocity = direction * agent.ValueRO.MoveSpeed;
+
+                // 应用转向
+                float currentAngle = math.atan2(agent.ValueRO.Velocity.y, agent.ValueRO.Velocity.x);
+                float desiredAngle = math.atan2(direction.y, direction.x);
+
+                float angleDiff = NormalizeAngle(desiredAngle - currentAngle);
+                float maxTurn = agent.ValueRO.TurnSpeed * deltaTime;
+                float newAngle = currentAngle + math.clamp(angleDiff, -maxTurn, maxTurn);
+
+                float2 smoothDir = new float2(math.cos(newAngle), math.sin(newAngle));
+                newVelocity = smoothDir * agent.ValueRO.MoveSpeed;
+
+                // 更新位置
+                float2 newPosition = agent.ValueRO.Position + newVelocity * deltaTime;
+
+                // 检查是否到达目标
+                if (agent.ValueRO.CurrentGoal != Entity.Null)
+                {
+                    if (SystemAPI.HasComponent<FlowFieldGoal>(agent.ValueRO.CurrentGoal))
                     {
-                        agent.State = AgentState.Seeking;
-                        agent.PathVersion = gridVersion;
-                    }
-
-                    // 如果不在寻路状态，跳过
-                    if (agent.State != AgentState.Seeking)
-                        return;
-
-                    // 获取流场方向
-                    int2 cell = grid.WorldToCellSafe(agent.Position);
-                    if (!grid.IsValidCell(cell))
-                    {
-                        agent.State = AgentState.NoPath;
-                        return;
-                    }
-
-                    int cellIdx = grid.CellToIndex(cell);
-                    float2 direction = grid.Directions[cellIdx];
-
-                    if (math.lengthsq(direction) < 1e-10f)
-                    {
-                        agent.State = AgentState.NoPath;
-                        return;
-                    }
-
-                    // 归一化方向
-                    direction = math.normalize(direction);
-
-                    // 计算速度
-                    float2 newVelocity = direction * agent.MoveSpeed;
-
-                    // 应用转向
-                    float currentAngle = math.atan2(agent.Velocity.y, agent.Velocity.x);
-                    float desiredAngle = math.atan2(direction.y, direction.x);
-
-                    float angleDiff = NormalizeAngle(desiredAngle - currentAngle);
-                    float maxTurn = agent.TurnSpeed * deltaTime;
-                    float newAngle = currentAngle + math.clamp(angleDiff, -maxTurn, maxTurn);
-
-                    float2 smoothDir = new float2(math.cos(newAngle), math.sin(newAngle));
-                    newVelocity = smoothDir * agent.MoveSpeed;
-
-                    // 更新位置
-                    float2 newPosition = agent.Position + newVelocity * deltaTime;
-
-                    // 检查是否到达目标
-                    if (agent.CurrentGoal != Entity.Null)
-                    {
-                        if (SystemAPI.HasComponent<FlowFieldGoal>(agent.CurrentGoal))
+                        FlowFieldGoal goal = SystemAPI.GetComponent<FlowFieldGoal>(agent.ValueRO.CurrentGoal);
+                        float dist = math.length(newPosition - goal.Position);
+                        if (dist <= agent.ValueRO.ArrivalThreshold)
                         {
-                            FlowFieldGoal goal = SystemAPI.GetComponent<FlowFieldGoal>(agent.CurrentGoal);
-                            float dist = math.length(newPosition - goal.Position);
-                            if (dist <= agent.ArrivalThreshold)
-                            {
-                                agent.State = AgentState.Arrived;
-                                newPosition = goal.Position;
-                            }
+                            agent.ValueRW.State = AgentState.Arrived;
+                            newPosition = goal.Position;
                         }
                     }
+                }
 
-                    // 更新组件
-                    agent.Position = newPosition;
-                    agent.Velocity = newVelocity;
-                    agent.RemainingPathDistance = grid.GoalDistances[cellIdx];
-                }).Run();
+                // 更新组件
+                agent.ValueRW.Position = newPosition;
+                agent.ValueRW.Velocity = newVelocity;
+                agent.ValueRW.RemainingPathDistance = grid.GoalDistances[cellIdx];
+            }
         }
 
         [GenerateTestsForBurstCompatibility]
@@ -137,33 +135,32 @@ namespace FlowField.Systems
 
             int agentCount = 0;
 
-            Entities
-                .WithAll<FlowFieldAgent>()
-                .ForEach((Entity entity, int entityIndex, ref FlowFieldAgent agent) =>
+            int queryIndex = 0;
+            foreach (var agent in SystemAPI.Query<RefRO<FlowFieldAgent>>())
+            {
+                if (queryIndex >= 4096) break;
+
+                positions[agentCount] = agent.ValueRO.Position;
+                moveSpeeds[agentCount] = agent.ValueRO.MoveSpeed;
+                turnSpeeds[agentCount] = agent.ValueRO.TurnSpeed;
+                velocities[agentCount] = agent.ValueRO.Velocity;
+                pathVersions[agentCount] = agent.ValueRO.PathVersion;
+                states[agentCount] = (int)agent.ValueRO.State;
+                arrivalThresholds[agentCount] = agent.ValueRO.ArrivalThreshold;
+
+                if (agent.ValueRO.CurrentGoal != Entity.Null &&
+                    SystemAPI.HasComponent<FlowFieldGoal>(agent.ValueRO.CurrentGoal))
                 {
-                    if (entityIndex >= 4096) return;
+                    goalPositions[agentCount] = SystemAPI.GetComponent<FlowFieldGoal>(agent.ValueRO.CurrentGoal).Position;
+                }
+                else
+                {
+                    goalPositions[agentCount] = float2.zero;
+                }
 
-                    positions[agentCount] = agent.Position;
-                    moveSpeeds[agentCount] = agent.MoveSpeed;
-                    turnSpeeds[agentCount] = agent.TurnSpeed;
-                    velocities[agentCount] = agent.Velocity;
-                    pathVersions[agentCount] = agent.PathVersion;
-                    states[agentCount] = (int)agent.State;
-                    goals[agentCount] = agent.CurrentGoal;
-                    arrivalThresholds[agentCount] = agent.ArrivalThreshold;
-
-                    if (agent.CurrentGoal != Entity.Null &&
-                        SystemAPI.HasComponent<FlowFieldGoal>(agent.CurrentGoal))
-                    {
-                        goalPositions[agentCount] = SystemAPI.GetComponent<FlowFieldGoal>(agent.CurrentGoal).Position;
-                    }
-                    else
-                    {
-                        goalPositions[agentCount] = float2.zero;
-                    }
-
-                    agentCount++;
-                }).Run();
+                agentCount++;
+                queryIndex++;
+            }
 
             if (agentCount == 0)
             {
@@ -190,7 +187,9 @@ namespace FlowField.Systems
                 TurnSpeeds = turnSpeeds,
                 Velocities = velocities,
                 PathVersions = pathVersions,
-                States = states,
+                OutPositions = positions,
+                OutVelocities = velocities,
+                OutStates = states,
                 GoalPositions = goalPositions,
                 ArrivalThresholds = arrivalThresholds,
                 CellTypes = grid.CellTypes,
@@ -207,30 +206,28 @@ namespace FlowField.Systems
 
             // 写回结果
             int idx = 0;
-            Entities
-                .WithAll<FlowFieldAgent>()
-                .ForEach((Entity entity, ref FlowFieldAgent agent) =>
+            foreach (var agent in SystemAPI.Query<RefRW<FlowFieldAgent>>())
+            {
+                if (idx >= agentCount) break;
+
+                agent.ValueRW.Position = positions[idx];
+                agent.ValueRW.Velocity = velocities[idx];
+                agent.ValueRW.State = (AgentState)states[idx];
+                agent.ValueRW.PathVersion = gridVersion;
+
+                // 检查到达
+                if (agent.ValueRO.State == AgentState.Seeking &&
+                    agent.ValueRO.CurrentGoal != Entity.Null)
                 {
-                    if (idx >= agentCount) return;
-
-                    agent.Position = positions[idx];
-                    agent.Velocity = velocities[idx];
-                    agent.State = (AgentState)states[idx];
-                    agent.PathVersion = gridVersion;
-
-                    // 检查到达
-                    if (agent.State == AgentState.Seeking &&
-                        agent.CurrentGoal != Entity.Null)
+                    float dist = math.length(agent.ValueRO.Position - goalPositions[idx]);
+                    if (dist <= agent.ValueRO.ArrivalThreshold)
                     {
-                        float dist = math.length(agent.Position - goalPositions[idx]);
-                        if (dist <= agent.ArrivalThreshold)
-                        {
-                            agent.State = AgentState.Arrived;
-                        }
+                        agent.ValueRW.State = AgentState.Arrived;
                     }
+                }
 
-                    idx++;
-                }).Run();
+                idx++;
+            }
 
             // 清理
             positions.Dispose();
@@ -245,7 +242,7 @@ namespace FlowField.Systems
         }
 
         [BurstCompile]
-        private struct BatchAgentMoveJob : IJob
+        struct BatchAgentMoveJob : IJob
         {
             [ReadOnly] public NativeArray<float2> Positions;
             [ReadOnly] public NativeArray<float> MoveSpeeds;

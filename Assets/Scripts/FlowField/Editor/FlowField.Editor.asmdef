@@ -1,0 +1,21 @@
+{
+    "name": "FlowField.Editor",
+    "rootNamespace": "FlowField.Editor",
+    "references": [
+        "FlowField",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

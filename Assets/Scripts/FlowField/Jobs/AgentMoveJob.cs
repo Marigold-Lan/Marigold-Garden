@@ -9,7 +9,7 @@ namespace FlowField.Jobs
     /// 代理移动Job - 基于流场方向移动代理
     /// 包含避障、速度平滑等行为
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct AgentMoveJob : IJobParallelFor
     {
         // ==================== 代理数据 ====================
@@ -157,7 +157,7 @@ namespace FlowField.Jobs
     /// 简化代理移动Job - 用于测试或性能敏感场景
     /// 只使用流场方向，不包含避障
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct SimpleAgentMoveJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float2> Positions;
@@ -212,7 +212,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 到达检测Job - 检测代理是否到达目标
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct ArrivalCheckJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float2> Positions;
@@ -231,7 +231,7 @@ namespace FlowField.Jobs
     /// <summary>
     /// 目标选择Job - 代理选择最近的目标
     /// </summary>
-    [BurstCompile(OptimizeFor = OptimizeFor.Throughput)]
+    [BurstCompile]
     public struct GoalSelectionJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<float2> AgentPositions;
